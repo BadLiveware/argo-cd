@@ -235,7 +235,7 @@ func TestGenerateYamlManifestInDir(t *testing.T) {
 	assert.Len(t, res1.Manifests, countOfManifests)
 
 	// this will test concatenated manifests to verify we split YAMLs correctly
-	res2, err := GenerateManifests(t.Context(), "./testdata/concatenated", "/", "", &q, false, &git.NoopCredsStore{}, resource.MustParse("0"), nil)
+	res2, err := GenerateManifests(t.Context(), "./testdata/concatenated", "/", "", &q, false, &git.NoopCredsStore{}, resource.MustParse("0"), nil, nil)
 	require.NoError(t, err)
 	assert.Len(t, res2.Manifests, 3)
 }
@@ -327,7 +327,7 @@ func Test_GenerateManifests_NoOutOfBoundsAccess(t *testing.T) {
 				Repo: &v1alpha1.Repository{}, ApplicationSource: &v1alpha1.ApplicationSource{}, ProjectName: "something",
 				ProjectSourceRepos: []string{"*"},
 			}
-			res, err := GenerateManifests(t.Context(), repoDir, "", "", &q, false, &git.NoopCredsStore{}, resource.MustParse("0"), nil)
+			res, err := GenerateManifests(t.Context(), repoDir, "", "", &q, false, &git.NoopCredsStore{}, resource.MustParse("0"), nil, nil)
 			require.Error(t, err)
 			assert.NotContains(t, err.Error(), mustNotContain)
 			require.ErrorContains(t, err, "illegal filepath")
@@ -345,7 +345,7 @@ func TestGenerateManifests_MissingSymlinkDestination(t *testing.T) {
 		Repo: &v1alpha1.Repository{}, ApplicationSource: &v1alpha1.ApplicationSource{}, ProjectName: "something",
 		ProjectSourceRepos: []string{"*"},
 	}
-	_, err = GenerateManifests(t.Context(), repoDir, "", "", &q, false, &git.NoopCredsStore{}, resource.MustParse("0"), nil)
+	_, err = GenerateManifests(t.Context(), repoDir, "", "", &q, false, &git.NoopCredsStore{}, resource.MustParse("0"), nil, nil)
 	require.NoError(t, err)
 }
 
@@ -1622,7 +1622,7 @@ func TestGenerateFromUTF16(t *testing.T) {
 		ProjectName:        "something",
 		ProjectSourceRepos: []string{"*"},
 	}
-	res1, err := GenerateManifests(t.Context(), "./testdata/utf-16", "/", "", &q, false, &git.NoopCredsStore{}, resource.MustParse("0"), nil)
+	res1, err := GenerateManifests(t.Context(), "./testdata/utf-16", "/", "", &q, false, &git.NoopCredsStore{}, resource.MustParse("0"), nil, nil)
 	require.NoError(t, err)
 	assert.Len(t, res1.Manifests, 2)
 }
@@ -1939,7 +1939,40 @@ func Test_newEnv(t *testing.T) {
 			Path:           "my-path",
 			TargetRevision: "my-target-revision",
 		},
-	}, "my-revision"))
+	}, "my-revision", nil))
+
+	// Test with metadata
+	metadata := &BuildMetadata{
+		Data: map[string]string{
+			"RESOLVED_TAG":      "v1.2.3",
+			"ORIGINAL_REVISION": "latest",
+		},
+	}
+	envWithMetadata := newEnv(&apiclient.ManifestRequest{
+		AppName:     "my-app-name",
+		Namespace:   "my-namespace",
+		ProjectName: "my-project-name",
+		Repo:        &v1alpha1.Repository{Repo: "https://github.com/my-org/my-repo"},
+		ApplicationSource: &v1alpha1.ApplicationSource{
+			Path:           "my-path",
+			TargetRevision: "my-target-revision",
+		},
+	}, "my-revision", metadata)
+
+	expected := &v1alpha1.Env{
+		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_NAME", Value: "my-app-name"},
+		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_NAMESPACE", Value: "my-namespace"},
+		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_PROJECT_NAME", Value: "my-project-name"},
+		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_REVISION", Value: "my-revision"},
+		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_REVISION_SHORT", Value: "my-revi"},
+		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_REVISION_SHORT_8", Value: "my-revis"},
+		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_SOURCE_REPO_URL", Value: "https://github.com/my-org/my-repo"},
+		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_SOURCE_PATH", Value: "my-path"},
+		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_SOURCE_TARGET_REVISION", Value: "my-target-revision"},
+		&v1alpha1.EnvEntry{Name: "ARGOCD_RESOLVED_TAG", Value: "v1.2.3"},
+		&v1alpha1.EnvEntry{Name: "ARGOCD_ORIGINAL_REVISION", Value: "latest"},
+	}
+	assert.Equal(t, expected, envWithMetadata)
 }
 
 func TestService_newHelmClientResolveRevision(t *testing.T) {
@@ -3169,7 +3202,7 @@ func TestCheckoutRevisionCanGetNonstandardRefs(t *testing.T) {
 	gitClient, err := git.NewClientExt("file://"+sourceRepoPath, destRepoPath, &git.NopCreds{}, true, false, "", "")
 	require.NoError(t, err)
 
-	pullSha, err := gitClient.LsRemote("refs/pull/123/head")
+	pullSha, _, err := gitClient.LsRemote("refs/pull/123/head")
 	require.NoError(t, err)
 
 	err = checkoutRevision(gitClient, "does-not-exist", false)
@@ -3249,7 +3282,7 @@ func TestFetchRevisionCanGetNonstandardRefs(t *testing.T) {
 	err = gitClient.Init()
 	require.NoError(t, err)
 
-	pullSha, err := gitClient.LsRemote("refs/pull/123/head")
+	pullSha, _, err := gitClient.LsRemote("refs/pull/123/head")
 	require.NoError(t, err)
 
 	err = fetch(gitClient, []string{"does-not-exist"})

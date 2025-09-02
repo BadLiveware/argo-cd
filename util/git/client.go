@@ -112,7 +112,7 @@ type Client interface {
 	Submodule() error
 	Checkout(revision string, submoduleEnabled bool) (string, error)
 	LsRefs() (*Refs, error)
-	LsRemote(revision string) (string, error)
+	LsRemote(revision string) (string, map[string]string, error)
 	LsFiles(path string, enableNewGitFileGlobbing bool) ([]string, error)
 	LsLargeFiles() ([]string, error)
 	CommitSHA() (string, error)
@@ -666,9 +666,9 @@ func (m *nativeGitClient) LsRefs() (*Refs, error) {
 // it will return the revision string. Otherwise, it returns an error indicating that the revision could
 // not be resolved. This method runs with in-memory storage and is safe to run concurrently,
 // or to be run without a git repository locally cloned.
-func (m *nativeGitClient) LsRemote(revision string) (res string, err error) {
+func (m *nativeGitClient) LsRemote(revision string) (res string, metadata map[string]string, err error) {
 	for attempt := 0; attempt < maxAttemptsCount; attempt++ {
-		res, err = m.lsRemote(revision)
+		res, metadata, err = m.lsRemote(revision)
 		if err == nil {
 			return
 		} else if apierrors.IsInternalError(err) || apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) ||
@@ -696,22 +696,31 @@ func getGitTags(refs []*plumbing.Reference) []string {
 	return tags
 }
 
-func (m *nativeGitClient) lsRemote(revision string) (string, error) {
+func (m *nativeGitClient) lsRemote(revision string) (string, map[string]string, error) {
+	metadata := make(map[string]string)
+	originalRevision := revision
+
 	if IsCommitSHA(revision) {
-		return revision, nil
+		metadata["ORIGINAL_REVISION"] = originalRevision
+		metadata["RESOLUTION_TYPE"] = "commit_sha"
+		return revision, metadata, nil
 	}
 
 	refs, err := m.getRefs()
 	if err != nil {
-		return "", fmt.Errorf("failed to list refs: %w", err)
+		return "", nil, fmt.Errorf("failed to list refs: %w", err)
 	}
 
 	if revision == "" {
 		revision = "HEAD"
 	}
 
+	// Check for tag resolution using semantic versioning
 	maxV, err := versions.MaxVersion(revision, getGitTags(refs))
 	if err == nil {
+		metadata["ORIGINAL_REVISION"] = originalRevision
+		metadata["RESOLVED_TAG"] = maxV
+		metadata["RESOLUTION_TYPE"] = "tag"
 		revision = maxV
 	}
 
@@ -733,7 +742,11 @@ func (m *nativeGitClient) lsRemote(revision string) (string, error) {
 		if ref.Name().Short() == revision || refName == revision {
 			if ref.Type() == plumbing.HashReference {
 				log.Debugf("revision '%s' resolved to '%s'", revision, hash)
-				return hash, nil
+				if metadata["RESOLUTION_TYPE"] == "" {
+					metadata["ORIGINAL_REVISION"] = originalRevision
+					metadata["RESOLUTION_TYPE"] = "branch_or_tag"
+				}
+				return hash, metadata, nil
 			}
 			if ref.Type() == plumbing.SymbolicReference {
 				refToResolve = ref.Target().String()
@@ -746,19 +759,24 @@ func (m *nativeGitClient) lsRemote(revision string) (string, error) {
 		// It should exist in our refToHash map
 		if hash, ok := refToHash[refToResolve]; ok {
 			log.Debugf("symbolic reference '%s' (%s) resolved to '%s'", revision, refToResolve, hash)
-			return hash, nil
+			metadata["ORIGINAL_REVISION"] = originalRevision
+			metadata["RESOLUTION_TYPE"] = "symbolic_reference"
+			metadata["RESOLVED_TO"] = refToResolve
+			return hash, metadata, nil
 		}
 	}
 
 	// We support the ability to use a truncated commit-SHA (e.g. first 7 characters of a SHA)
 	if IsTruncatedCommitSHA(revision) {
 		log.Debugf("revision '%s' assumed to be commit sha", revision)
-		return revision, nil
+		metadata["ORIGINAL_REVISION"] = originalRevision
+		metadata["RESOLUTION_TYPE"] = "truncated_commit_sha"
+		return revision, metadata, nil
 	}
 
 	// If we get here, revision string had non hexadecimal characters (indicating its a branch, tag,
 	// or symbolic ref) and we were unable to resolve it to a commit SHA.
-	return "", fmt.Errorf("unable to resolve '%s' to a commit SHA", revision)
+	return "", nil, fmt.Errorf("unable to resolve '%s' to a commit SHA", revision)
 }
 
 // CommitSHA returns current commit sha from `git rev-parse HEAD`

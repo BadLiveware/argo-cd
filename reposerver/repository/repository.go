@@ -320,7 +320,7 @@ func (s *Service) runRepoOperation(
 	source *v1alpha1.ApplicationSource,
 	verifyCommit bool,
 	cacheFn func(cacheKey string, refSourceCommitSHAs cache.ResolvedRevisions, firstInvocation bool) (bool, error),
-	operation func(repoRoot, commitSHA, cacheKey string, ctxSrc operationContextSrc) error,
+	operation func(repoRoot, commitSHA, cacheKey string, ctxSrc operationContextSrc, revisionMetadata map[string]string) error,
 	settings operationSettings,
 	hasMultipleSources bool,
 	refSources map[string]*v1alpha1.RefTarget,
@@ -334,6 +334,7 @@ func (s *Service) runRepoOperation(
 	var gitClient git.Client
 	var helmClient helm.Client
 	var err error
+	var revisionMetadata map[string]string
 	gitClientOpts := git.WithCache(s.cache, !settings.noRevisionCache && !settings.noCache)
 	revision = textutils.FirstNonEmpty(revision, source.TargetRevision)
 	unresolvedRevision := revision
@@ -344,7 +345,7 @@ func (s *Service) runRepoOperation(
 	case source.IsHelm():
 		helmClient, revision, err = s.newHelmClientResolveRevision(repo, revision, source.Chart, settings.noCache || settings.noRevisionCache)
 	default:
-		gitClient, revision, err = s.newClientResolveRevision(repo, revision, gitClientOpts)
+		gitClient, revision, revisionMetadata, err = s.newClientResolveRevisionWithMetadata(repo, revision, gitClientOpts)
 	}
 
 	if err != nil {
@@ -411,7 +412,7 @@ func (s *Service) runRepoOperation(
 
 		return operation(ociPath, revision, revision, func() (*operationContext, error) {
 			return &operationContext{appPath, ""}, nil
-		})
+		}, nil)
 	} else if source.IsHelm() {
 		if settings.noCache {
 			err = helmClient.CleanChartCache(source.Chart, revision)
@@ -446,7 +447,7 @@ func (s *Service) runRepoOperation(
 		}
 		return operation(chartPath, revision, revision, func() (*operationContext, error) {
 			return &operationContext{chartPath, ""}, nil
-		})
+		}, nil)
 	}
 	closer, err := s.repoLock.Lock(gitClient.Root(), revision, settings.allowConcurrent, func() (goio.Closer, error) {
 		return s.checkoutRevision(gitClient, revision, s.initConstants.SubmoduleEnabled)
@@ -516,7 +517,7 @@ func (s *Service) runRepoOperation(
 			return nil, err
 		}
 		return &operationContext{appPath, signature}, nil
-	})
+	}, revisionMetadata)
 }
 
 func getRepoSanitizerRegex(rootDir string) *regexp.Regexp {
@@ -605,7 +606,7 @@ func (s *Service) GenerateManifest(ctx context.Context, q *apiclient.ManifestReq
 	tarConcluded := false
 	var promise *ManifestResponsePromise
 
-	operation := func(repoRoot, commitSHA, cacheKey string, ctxSrc operationContextSrc) error {
+	operation := func(repoRoot, commitSHA, cacheKey string, ctxSrc operationContextSrc, revisionMetadata map[string]string) error {
 		// do not generate manifests if Path and Chart fields are not set for a source in Multiple Sources
 		if q.HasMultipleSources && q.ApplicationSource.Path == "" && q.ApplicationSource.Chart == "" {
 			log.WithFields(map[string]any{
@@ -617,7 +618,7 @@ func (s *Service) GenerateManifest(ctx context.Context, q *apiclient.ManifestReq
 			return nil
 		}
 
-		promise = s.runManifestGen(ctx, repoRoot, commitSHA, cacheKey, ctxSrc, q)
+		promise = s.runManifestGen(ctx, repoRoot, commitSHA, cacheKey, ctxSrc, q, revisionMetadata)
 		// The fist channel to send the message will resume this operation.
 		// The main purpose for using channels here is to be able to unlock
 		// the repository as soon as the lock in not required anymore. In
@@ -691,7 +692,7 @@ func (s *Service) GenerateManifestWithFiles(stream apiclient.RepoServerService_G
 			return nil, fmt.Errorf("failed to get app path: %w", err)
 		}
 		return &operationContext{appPath, ""}, nil
-	}, req)
+	}, req, nil)
 
 	var res *apiclient.ManifestResponse
 	tarConcluded := false
@@ -743,7 +744,7 @@ type generateManifestCh struct {
 // - or, the cache does contain a value for this key, but it is an expired manifest generation entry
 // - or, NoCache is true
 // Returns a ManifestResponse, or an error, but not both
-func (s *Service) runManifestGen(ctx context.Context, repoRoot, commitSHA, cacheKey string, opContextSrc operationContextSrc, q *apiclient.ManifestRequest) *ManifestResponsePromise {
+func (s *Service) runManifestGen(ctx context.Context, repoRoot, commitSHA, cacheKey string, opContextSrc operationContextSrc, q *apiclient.ManifestRequest, revisionMetadata map[string]string) *ManifestResponsePromise {
 	responseCh := make(chan *apiclient.ManifestResponse)
 	tarDoneCh := make(chan bool)
 	errCh := make(chan error)
@@ -754,7 +755,7 @@ func (s *Service) runManifestGen(ctx context.Context, repoRoot, commitSHA, cache
 		tarDoneCh:  tarDoneCh,
 		errCh:      errCh,
 	}
-	go s.runManifestGenAsync(ctx, repoRoot, commitSHA, cacheKey, opContextSrc, q, channels)
+	go s.runManifestGenAsync(ctx, repoRoot, commitSHA, cacheKey, opContextSrc, q, channels, revisionMetadata)
 	return responsePromise
 }
 
@@ -767,7 +768,7 @@ type repoRef struct {
 	key string
 }
 
-func (s *Service) runManifestGenAsync(ctx context.Context, repoRoot, commitSHA, cacheKey string, opContextSrc operationContextSrc, q *apiclient.ManifestRequest, ch *generateManifestCh) {
+func (s *Service) runManifestGenAsync(ctx context.Context, repoRoot, commitSHA, cacheKey string, opContextSrc operationContextSrc, q *apiclient.ManifestRequest, ch *generateManifestCh, revisionMetadata map[string]string) {
 	defer func() {
 		close(ch.errCh)
 		close(ch.responseCh)
@@ -874,7 +875,7 @@ func (s *Service) runManifestGenAsync(ctx context.Context, repoRoot, commitSHA, 
 			}
 		}
 
-		manifestGenResult, err = GenerateManifests(ctx, opContext.appPath, repoRoot, commitSHA, q, false, s.gitCredsStore, s.initConstants.MaxCombinedDirectoryManifestsSize, s.gitRepoPaths, WithCMPTarDoneChannel(ch.tarDoneCh), WithCMPTarExcludedGlobs(s.initConstants.CMPTarExcludedGlobs), WithCMPUseManifestGeneratePaths(s.initConstants.CMPUseManifestGeneratePaths))
+		manifestGenResult, err = GenerateManifests(ctx, opContext.appPath, repoRoot, commitSHA, q, false, s.gitCredsStore, s.initConstants.MaxCombinedDirectoryManifestsSize, s.gitRepoPaths, revisionMetadata, WithCMPTarDoneChannel(ch.tarDoneCh), WithCMPTarExcludedGlobs(s.initConstants.CMPTarExcludedGlobs), WithCMPUseManifestGeneratePaths(s.initConstants.CMPUseManifestGeneratePaths))
 	}
 	refSourceCommitSHAs := make(map[string]string)
 	if len(repoRefs) > 0 {
@@ -1494,13 +1495,19 @@ func WithCMPUseManifestGeneratePaths(enabled bool) GenerateManifestOpt {
 }
 
 // GenerateManifests generates manifests from a path. Overrides are applied as a side effect on the given ApplicationSource.
-func GenerateManifests(ctx context.Context, appPath, repoRoot, revision string, q *apiclient.ManifestRequest, isLocal bool, gitCredsStore git.CredsStore, maxCombinedManifestQuantity resource.Quantity, gitRepoPaths utilio.TempPaths, opts ...GenerateManifestOpt) (*apiclient.ManifestResponse, error) {
+func GenerateManifests(ctx context.Context, appPath, repoRoot, revision string, q *apiclient.ManifestRequest, isLocal bool, gitCredsStore git.CredsStore, maxCombinedManifestQuantity resource.Quantity, gitRepoPaths utilio.TempPaths, buildMetadata map[string]string, opts ...GenerateManifestOpt) (*apiclient.ManifestResponse, error) {
 	opt := newGenerateManifestOpt(opts...)
 	var targetObjs []*unstructured.Unstructured
 
 	resourceTracking := argo.NewResourceTracking()
 
-	env := newEnv(q, revision)
+	// Convert revision metadata to BuildMetadata
+	var metadata *BuildMetadata
+	if buildMetadata != nil {
+		metadata = &BuildMetadata{Data: buildMetadata}
+	}
+
+	env := newEnv(q, revision, metadata)
 
 	appSourceType, err := GetAppSourceType(ctx, q.ApplicationSource, appPath, repoRoot, q.AppName, q.EnabledSourceTypes, opt.cmpTarExcludedGlobs, env.Environ())
 	if err != nil {
@@ -1604,10 +1611,15 @@ func GenerateManifests(ctx context.Context, appPath, repoRoot, revision string, 
 	}, nil
 }
 
-func newEnv(q *apiclient.ManifestRequest, revision string) *v1alpha1.Env {
+// BuildMetadata holds arbitrary metadata that can be used when building manifests
+type BuildMetadata struct {
+	Data map[string]string
+}
+
+func newEnv(q *apiclient.ManifestRequest, revision string, metadata *BuildMetadata) *v1alpha1.Env {
 	shortRevision := shortenRevision(revision, 7)
 	shortRevision8 := shortenRevision(revision, 8)
-	return &v1alpha1.Env{
+	env := &v1alpha1.Env{
 		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_NAME", Value: q.AppName},
 		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_NAMESPACE", Value: q.Namespace},
 		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_PROJECT_NAME", Value: q.ProjectName},
@@ -1618,6 +1630,15 @@ func newEnv(q *apiclient.ManifestRequest, revision string) *v1alpha1.Env {
 		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_SOURCE_PATH", Value: q.ApplicationSource.Path},
 		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_SOURCE_TARGET_REVISION", Value: q.ApplicationSource.TargetRevision},
 	}
+
+	// Add metadata as environment variables if present
+	if metadata != nil && metadata.Data != nil {
+		for key, value := range metadata.Data {
+			*env = append(*env, &v1alpha1.EnvEntry{Name: "ARGOCD_" + key, Value: value})
+		}
+	}
+
+	return env
 }
 
 func shortenRevision(revision string, length int) string {
@@ -2173,7 +2194,7 @@ func (s *Service) GetAppDetails(ctx context.Context, q *apiclient.RepoServerAppD
 	res := &apiclient.RepoAppDetailsResponse{}
 
 	cacheFn := s.createGetAppDetailsCacheHandler(res, q)
-	operation := func(repoRoot, commitSHA, revision string, ctxSrc operationContextSrc) error {
+	operation := func(repoRoot, commitSHA, revision string, ctxSrc operationContextSrc, revisionMetadata map[string]string) error {
 		opContext, err := ctxSrc()
 		if err != nil {
 			return err
@@ -2343,7 +2364,7 @@ func populateKustomizeAppDetails(res *apiclient.RepoAppDetailsResponse, q *apicl
 		Repo:              q.Repo,
 		ApplicationSource: q.Source,
 	}
-	env := newEnv(&fakeManifestRequest, reversion)
+	env := newEnv(&fakeManifestRequest, reversion, nil)
 	_, images, _, err := k.Build(q.Source.Kustomize, q.KustomizeOptions, env, nil)
 	if err != nil {
 		return err
@@ -2577,12 +2598,26 @@ func (s *Service) newClientResolveRevision(repo *v1alpha1.Repository, revision s
 	if err != nil {
 		return nil, "", err
 	}
-	commitSHA, err := gitClient.LsRemote(revision)
+	commitSHA, _, err := gitClient.LsRemote(revision)
 	if err != nil {
 		s.metricsServer.IncGitLsRemoteFail(gitClient.Root(), revision)
 		return nil, "", err
 	}
 	return gitClient, commitSHA, nil
+}
+
+// newClientResolveRevisionWithMetadata is a helper that also returns revision resolution metadata
+func (s *Service) newClientResolveRevisionWithMetadata(repo *v1alpha1.Repository, revision string, opts ...git.ClientOpts) (git.Client, string, map[string]string, error) {
+	gitClient, err := s.newClient(repo, opts...)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	commitSHA, metadata, err := gitClient.LsRemote(revision)
+	if err != nil {
+		s.metricsServer.IncGitLsRemoteFail(gitClient.Root(), revision)
+		return nil, "", nil, err
+	}
+	return gitClient, commitSHA, metadata, nil
 }
 
 func (s *Service) newOCIClientResolveRevision(ctx context.Context, repo *v1alpha1.Repository, revision string, noRevisionCache bool) (oci.Client, string, error) {
@@ -2839,7 +2874,7 @@ func (s *Service) ResolveRevision(ctx context.Context, q *apiclient.ResolveRevis
 	if err != nil {
 		return &apiclient.ResolveRevisionResponse{Revision: "", AmbiguousRevision: ""}, err
 	}
-	revision, err := gitClient.LsRemote(ambiguousRevision)
+	revision, _, err := gitClient.LsRemote(ambiguousRevision)
 	if err != nil {
 		s.metricsServer.IncGitLsRemoteFail(gitClient.Root(), revision)
 		return &apiclient.ResolveRevisionResponse{Revision: "", AmbiguousRevision: ""}, err
@@ -3043,7 +3078,7 @@ func (s *Service) UpdateRevisionForPaths(_ context.Context, request *apiclient.U
 		return nil, status.Errorf(codes.Internal, "unable to resolve git revision %s: %v", revision, err)
 	}
 
-	syncedRevision, err = gitClient.LsRemote(syncedRevision)
+	syncedRevision, _, err = gitClient.LsRemote(syncedRevision)
 	if err != nil {
 		s.metricsServer.IncGitLsRemoteFail(gitClient.Root(), revision)
 		return nil, status.Errorf(codes.Internal, "unable to resolve git revision %s: %v", revision, err)

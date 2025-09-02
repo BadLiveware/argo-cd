@@ -803,7 +803,7 @@ func (_c *Client_LsRefs_Call) RunAndReturn(run func() (*git.Refs, error)) *Clien
 }
 
 // LsRemote provides a mock function for the type Client
-func (_mock *Client) LsRemote(revision string) (string, error) {
+func (_mock *Client) LsRemote(revision string) (string, map[string]string, error) {
 	ret := _mock.Called(revision)
 
 	if len(ret) == 0 {
@@ -811,8 +811,9 @@ func (_mock *Client) LsRemote(revision string) (string, error) {
 	}
 
 	var r0 string
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(string) (string, error)); ok {
+	var r1 map[string]string
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(string) (string, map[string]string, error)); ok {
 		return returnFunc(revision)
 	}
 	if returnFunc, ok := ret.Get(0).(func(string) string); ok {
@@ -820,12 +821,19 @@ func (_mock *Client) LsRemote(revision string) (string, error) {
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(string) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(string) map[string]string); ok {
 		r1 = returnFunc(revision)
 	} else {
-		r1 = ret.Error(1)
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(map[string]string)
+		}
 	}
-	return r0, r1
+	if returnFunc, ok := ret.Get(2).(func(string) error); ok {
+		r2 = returnFunc(revision)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
 }
 
 // Client_LsRemote_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LsRemote'
@@ -852,12 +860,12 @@ func (_c *Client_LsRemote_Call) Run(run func(revision string)) *Client_LsRemote_
 	return _c
 }
 
-func (_c *Client_LsRemote_Call) Return(s string, err error) *Client_LsRemote_Call {
-	_c.Call.Return(s, err)
+func (_c *Client_LsRemote_Call) Return(s string, metadata map[string]string, err error) *Client_LsRemote_Call {
+	_c.Call.Return(s, metadata, err)
 	return _c
 }
 
-func (_c *Client_LsRemote_Call) RunAndReturn(run func(revision string) (string, error)) *Client_LsRemote_Call {
+func (_c *Client_LsRemote_Call) RunAndReturn(run func(revision string) (string, map[string]string, error)) *Client_LsRemote_Call {
 	_c.Call.Return(run)
 	return _c
 }
