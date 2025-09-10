@@ -1940,8 +1940,9 @@ func Test_newEnv(t *testing.T) {
 			TargetRevision: "my-target-revision",
 		},
 	}, "my-revision", nil))
+}
 
-	// Test with metadata
+func Test_newEnv_BuildMetadata(t *testing.T) {
 	metadata := &BuildMetadata{
 		Data: map[string]string{
 			"RESOLVED_TAG":      "v1.2.3",
