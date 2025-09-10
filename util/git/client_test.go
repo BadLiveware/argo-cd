@@ -218,6 +218,7 @@ func Test_SemverTags(t *testing.T) {
 	require.NoError(t, err)
 
 	mapTagRefs := map[string]string{}
+	mapRefsTags := map[string]string{}
 	for _, tag := range []string{
 		"v1.0.0-rc1",
 		"v1.0.0-rc2",
@@ -239,6 +240,7 @@ func Test_SemverTags(t *testing.T) {
 		require.NoError(t, err)
 
 		mapTagRefs[tag] = sha
+		mapRefsTags[sha] = tag
 	}
 
 	for _, tc := range []struct {
@@ -338,7 +340,7 @@ func Test_SemverTags(t *testing.T) {
 		expected: mapTagRefs["2024-banana"],
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
-			commitSHA, _, err := client.LsRemote(tc.ref)
+			commitSHA, resolvedTag, err := client.LsRemote(tc.ref)
 			if tc.error {
 				require.Error(t, err)
 				return
@@ -346,6 +348,7 @@ func Test_SemverTags(t *testing.T) {
 			require.NoError(t, err)
 			assert.True(t, IsCommitSHA(commitSHA))
 			assert.Equal(t, tc.expected, commitSHA)
+			assert.Equal(t, mapRefsTags[tc.expected], resolvedTag["RESOLVED_TAG"])
 		})
 	}
 }
