@@ -2634,13 +2634,17 @@ func (s *Service) newOCIClientResolveRevision(ctx context.Context, repo *v1alpha
 	return ociClient, digest, nil
 }
 
-func (s *Service) newHelmClientResolveRevision(repo *v1alpha1.Repository, revision string, chart string, noRevisionCache bool) (helm.Client, string, error) {
+func (s *Service) newHelmClientResolveRevision(repo *v1alpha1.Repository, revision string, chart string, noRevisionCache bool) (helm.Client, string, map[string]string, error) {
 	enableOCI := repo.EnableOCI || helm.IsHelmOciRepo(repo.Repo)
 	helmClient := s.newHelmClient(repo.Repo, repo.GetHelmCreds(), enableOCI, repo.Proxy, repo.NoProxy, helm.WithIndexCache(s.cache), helm.WithChartPaths(s.chartPaths))
+	metadata := map[string]string{
+		"ORIGINAL_REVISION": revision,
+	}
 
 	// Note: This check runs the risk of returning a version which is not found in the helm registry.
 	if versions.IsVersion(revision) {
-		return helmClient, revision, nil
+		metadata["RESOLUTION_TYPE"] = "direct"
+		return helmClient, revision, metadata, nil
 	}
 
 	var tags []string
@@ -2648,26 +2652,28 @@ func (s *Service) newHelmClientResolveRevision(repo *v1alpha1.Repository, revisi
 		var err error
 		tags, err = helmClient.GetTags(chart, noRevisionCache)
 		if err != nil {
-			return nil, "", fmt.Errorf("unable to get tags: %w", err)
+			return nil, "", nil, fmt.Errorf("unable to get tags: %w", err)
 		}
 	} else {
 		index, err := helmClient.GetIndex(noRevisionCache, s.initConstants.HelmRegistryMaxIndexSize)
 		if err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
 		entries, err := index.GetEntries(chart)
 		if err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
 		tags = entries.Tags()
 	}
 
-	maxV, err := versions.MaxVersion(revision, tags)
+	maxV, resolutionType, err := versions.MaxVersion(revision, tags)
 	if err != nil {
-		return nil, "", fmt.Errorf("invalid revision: %w", err)
+		return nil, "", nil, fmt.Errorf("invalid revision: %w", err)
 	}
+	metadata["RESOLUTION_TYPE"] = resolutionType
+	metadata["RESOLVED_TAG"] = maxV
 
-	return helmClient, maxV, nil
+	return helmClient, maxV, metadata, nil
 }
 
 // directoryPermissionInitializer ensures the directory has read/write/execute permissions and returns

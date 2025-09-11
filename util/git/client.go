@@ -702,7 +702,7 @@ func (m *nativeGitClient) lsRemote(revision string) (string, map[string]string, 
 
 	if IsCommitSHA(revision) {
 		metadata["ORIGINAL_REVISION"] = originalRevision
-		metadata["RESOLUTION_TYPE"] = "commit_sha"
+		metadata["RESOLUTION_TYPE"] = "direct"
 		return revision, metadata, nil
 	}
 
@@ -716,11 +716,11 @@ func (m *nativeGitClient) lsRemote(revision string) (string, map[string]string, 
 	}
 
 	// Check for tag resolution using semantic versioning
-	maxV, err := versions.MaxVersion(revision, getGitTags(refs))
+	maxV, resolutionType, err := versions.MaxVersion(revision, getGitTags(refs))
 	if err == nil {
+		metadata["RESOLUTION_TYPE"] = resolutionType
 		metadata["ORIGINAL_REVISION"] = originalRevision
 		metadata["RESOLVED_TAG"] = maxV
-		metadata["RESOLUTION_TYPE"] = "tag"
 		revision = maxV
 	}
 
@@ -744,7 +744,7 @@ func (m *nativeGitClient) lsRemote(revision string) (string, map[string]string, 
 				log.Debugf("revision '%s' resolved to '%s'", revision, hash)
 				if metadata["RESOLUTION_TYPE"] == "" {
 					metadata["ORIGINAL_REVISION"] = originalRevision
-					metadata["RESOLUTION_TYPE"] = "branch_or_tag"
+					metadata["RESOLUTION_TYPE"] = "direct"
 				}
 				return hash, metadata, nil
 			}
