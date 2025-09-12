@@ -860,8 +860,8 @@ func (_c *Client_LsRemote_Call) Run(run func(revision string)) *Client_LsRemote_
 	return _c
 }
 
-func (_c *Client_LsRemote_Call) Return(s string, metadata map[string]string, err error) *Client_LsRemote_Call {
-	_c.Call.Return(s, metadata, err)
+func (_c *Client_LsRemote_Call) Return(s string, stringToString map[string]string, err error) *Client_LsRemote_Call {
+	_c.Call.Return(s, stringToString, err)
 	return _c
 }
 
