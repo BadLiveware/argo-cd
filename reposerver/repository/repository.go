@@ -341,9 +341,9 @@ func (s *Service) runRepoOperation(
 
 	switch {
 	case source.IsOCI():
-		ociClient, revision, err = s.newOCIClientResolveRevision(ctx, repo, revision, settings.noCache || settings.noRevisionCache)
+		ociClient, revision, revisionMetadata, err = s.newOCIClientResolveRevision(ctx, repo, revision, settings.noCache || settings.noRevisionCache)
 	case source.IsHelm():
-		helmClient, revision, err = s.newHelmClientResolveRevision(repo, revision, source.Chart, settings.noCache || settings.noRevisionCache)
+		helmClient, revision, revisionMetadata, err = s.newHelmClientResolveRevision(repo, revision, source.Chart, settings.noCache || settings.noRevisionCache)
 	default:
 		gitClient, revision, revisionMetadata, err = s.newClientResolveRevisionWithMetadata(repo, revision, gitClientOpts)
 	}
@@ -2538,41 +2538,41 @@ func (s *Service) GetOCIMetadata(ctx context.Context, q *apiclient.RepoServerRev
 }
 
 // GetRevisionChartDetails returns the helm chart details of a given version
-func (s *Service) GetRevisionChartDetails(_ context.Context, q *apiclient.RepoServerRevisionChartDetailsRequest) (*v1alpha1.ChartDetails, error) {
-	details, err := s.cache.GetRevisionChartDetails(q.Repo.Repo, q.Name, q.Revision)
+func (s *Service) GetRevisionChartDetails(_ context.Context, q *apiclient.RepoServerRevisionChartDetailsRequest) (*v1alpha1.ChartDetails, map[string]string, error) {
+	details, metadata, err := s.cache.GetRevisionChartDetails(q.Repo.Repo, q.Name, q.Revision)
 	if err == nil {
 		log.Infof("revision chart details cache hit: %s/%s/%s", q.Repo.Repo, q.Name, q.Revision)
-		return details, nil
+		return details, metadata, nil
 	}
 	if errors.Is(err, cache.ErrCacheMiss) {
 		log.Infof("revision metadata cache miss: %s/%s/%s", q.Repo.Repo, q.Name, q.Revision)
 	} else {
 		log.Warnf("revision metadata cache error %s/%s/%s: %v", q.Repo.Repo, q.Name, q.Revision, err)
 	}
-	helmClient, revision, err := s.newHelmClientResolveRevision(q.Repo, q.Revision, q.Name, true)
+	helmClient, revision, metadata, err := s.newHelmClientResolveRevision(q.Repo, q.Revision, q.Name, true)
 	if err != nil {
-		return nil, fmt.Errorf("helm client error: %w", err)
+		return nil, nil, fmt.Errorf("helm client error: %w", err)
 	}
 	chartPath, closer, err := helmClient.ExtractChart(q.Name, revision, false, s.initConstants.HelmManifestMaxExtractedSize, s.initConstants.DisableHelmManifestMaxExtractedSize)
 	if err != nil {
-		return nil, fmt.Errorf("error extracting chart: %w", err)
+		return nil, nil, fmt.Errorf("error extracting chart: %w", err)
 	}
 	defer utilio.Close(closer)
 	helmCmd, err := helm.NewCmdWithVersion(chartPath, q.Repo.EnableOCI, q.Repo.Proxy, q.Repo.NoProxy)
 	if err != nil {
-		return nil, fmt.Errorf("error creating helm cmd: %w", err)
+		return nil, nil, fmt.Errorf("error creating helm cmd: %w", err)
 	}
 	defer helmCmd.Close()
 	helmDetails, err := helmCmd.InspectChart()
 	if err != nil {
-		return nil, fmt.Errorf("error inspecting chart: %w", err)
+		return nil, nil, fmt.Errorf("error inspecting chart: %w", err)
 	}
 	details, err = getChartDetails(helmDetails)
 	if err != nil {
-		return nil, fmt.Errorf("error getting chart details: %w", err)
+		return nil, nil, fmt.Errorf("error getting chart details: %w", err)
 	}
-	_ = s.cache.SetRevisionChartDetails(q.Repo.Repo, q.Name, q.Revision, details)
-	return details, nil
+	_ = s.cache.SetRevisionChartDetails(q.Repo.Repo, q.Name, q.Revision, details, metadata)
+	return details, metadata, nil
 }
 
 func fileParameters(q *apiclient.RepoServerAppDetailsQuery) []v1alpha1.HelmFileParameter {
@@ -2620,18 +2620,18 @@ func (s *Service) newClientResolveRevisionWithMetadata(repo *v1alpha1.Repository
 	return gitClient, commitSHA, metadata, nil
 }
 
-func (s *Service) newOCIClientResolveRevision(ctx context.Context, repo *v1alpha1.Repository, revision string, noRevisionCache bool) (oci.Client, string, error) {
+func (s *Service) newOCIClientResolveRevision(ctx context.Context, repo *v1alpha1.Repository, revision string, noRevisionCache bool) (oci.Client, string, map[string]string, error) {
 	ociClient, err := s.newOCIClient(repo.Repo, repo.GetOCICreds(), repo.Proxy, repo.NoProxy, s.initConstants.OCIMediaTypes, oci.WithIndexCache(s.cache), oci.WithImagePaths(s.ociPaths), oci.WithManifestMaxExtractedSize(s.initConstants.OCIManifestMaxExtractedSize), oci.WithDisableManifestMaxExtractedSize(s.initConstants.DisableOCIManifestMaxExtractedSize))
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to initialize oci client: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to initialize oci client: %w", err)
 	}
 
-	digest, err := ociClient.ResolveRevision(ctx, revision, noRevisionCache)
+	digest, revisionMetadata, err := ociClient.ResolveRevision(ctx, revision, noRevisionCache)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to resolve revision %q: %w", revision, err)
+		return nil, "", nil, fmt.Errorf("failed to resolve revision %q: %w", revision, err)
 	}
 
-	return ociClient, digest, nil
+	return ociClient, digest, revisionMetadata, nil
 }
 
 func (s *Service) newHelmClientResolveRevision(repo *v1alpha1.Repository, revision string, chart string, noRevisionCache bool) (helm.Client, string, map[string]string, error) {
@@ -2856,7 +2856,7 @@ func (s *Service) ResolveRevision(ctx context.Context, q *apiclient.ResolveRevis
 	source := app.Spec.GetSourcePtrByIndex(int(q.SourceIndex))
 
 	if source.IsOCI() {
-		_, revision, err := s.newOCIClientResolveRevision(ctx, repo, ambiguousRevision, true)
+		_, revision, _, err := s.newOCIClientResolveRevision(ctx, repo, ambiguousRevision, true)
 		if err != nil {
 			return &apiclient.ResolveRevisionResponse{Revision: "", AmbiguousRevision: ""}, err
 		}
@@ -2867,7 +2867,7 @@ func (s *Service) ResolveRevision(ctx context.Context, q *apiclient.ResolveRevis
 	}
 
 	if source.IsHelm() {
-		_, revision, err := s.newHelmClientResolveRevision(repo, ambiguousRevision, source.Chart, true)
+		_, revision, _, err := s.newHelmClientResolveRevision(repo, ambiguousRevision, source.Chart, true)
 		if err != nil {
 			return &apiclient.ResolveRevisionResponse{Revision: "", AmbiguousRevision: ""}, err
 		}

@@ -35,6 +35,11 @@ type Cache struct {
 	revisionCacheLockTimeout time.Duration
 }
 
+type ChartDetailsWithMetadata struct {
+	ChartDetails *appv1.ChartDetails
+	Metadata     map[string]string
+}
+
 // ClusterRuntimeInfo holds cluster runtime information
 type ClusterRuntimeInfo interface {
 	// GetApiVersions returns supported api versions
@@ -471,15 +476,18 @@ func revisionChartDetailsKey(repoURL, chart, revision string) string {
 	return fmt.Sprintf("chartdetails|%s|%s|%s", repoURL, chart, revision)
 }
 
-func (c *Cache) GetRevisionChartDetails(repoURL, chart, revision string) (*appv1.ChartDetails, error) {
-	item := &appv1.ChartDetails{}
-	return item, c.cache.GetItem(revisionChartDetailsKey(repoURL, chart, revision), item)
+func (c *Cache) GetRevisionChartDetails(repoURL, chart, revision string) (*appv1.ChartDetails, map[string]string, error) {
+	item := &ChartDetailsWithMetadata{}
+	return item.ChartDetails, item.Metadata, c.cache.GetItem(revisionChartDetailsKey(repoURL, chart, revision), item)
 }
 
-func (c *Cache) SetRevisionChartDetails(repoURL, chart, revision string, item *appv1.ChartDetails) error {
+func (c *Cache) SetRevisionChartDetails(repoURL, chart, revision string, item *appv1.ChartDetails, metadata map[string]string) error {
 	return c.cache.SetItem(
 		revisionChartDetailsKey(repoURL, chart, revision),
-		item,
+		&ChartDetailsWithMetadata{
+			ChartDetails: item,
+			Metadata:     metadata,
+		},
 		&cacheutil.CacheActionOpts{Expiration: c.repoCacheExpiration})
 }
 

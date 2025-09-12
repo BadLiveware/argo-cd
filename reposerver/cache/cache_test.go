@@ -597,7 +597,7 @@ func TestRevisionChartDetails(t *testing.T) {
 	t.Run("GetRevisionChartDetails cache miss", func(t *testing.T) {
 		fixtures := newFixtures()
 		t.Cleanup(fixtures.mockCache.StopRedisCallback)
-		details, err := fixtures.cache.GetRevisionChartDetails("test-repo", "test-revision", "v1.0.0")
+		details, _, err := fixtures.cache.GetRevisionChartDetails("test-repo", "test-revision", "v1.0.0")
 		require.ErrorIs(t, err, ErrCacheMiss)
 		assert.Equal(t, &v1alpha1.ChartDetails{}, details)
 		fixtures.mockCache.AssertCacheCalledTimes(t, &mocks.CacheCallCounts{ExternalGets: 1})
@@ -606,19 +606,25 @@ func TestRevisionChartDetails(t *testing.T) {
 		fixtures := newFixtures()
 		t.Cleanup(fixtures.mockCache.StopRedisCallback)
 		cache := fixtures.cache
-		expectedItem := &v1alpha1.ChartDetails{
-			Description: "test-chart",
-			Home:        "v1.0.0",
-			Maintainers: []string{"test-maintainer"},
+		expectedItem := &ChartDetailsWithMetadata{
+			ChartDetails: &v1alpha1.ChartDetails{
+				Description: "test-chart",
+				Home:        "v1.0.0",
+				Maintainers: []string{"test-maintainer"},
+			},
+			Metadata: map[string]string{
+				"test-metadata": "test-metadata",
+			},
 		}
 		err := cache.cache.SetItem(
 			revisionChartDetailsKey("test-repo", "test-revision", "v1.0.0"),
 			expectedItem,
 			&cacheutil.CacheActionOpts{Expiration: 30 * time.Second})
 		require.NoError(t, err)
-		details, err := fixtures.cache.GetRevisionChartDetails("test-repo", "test-revision", "v1.0.0")
+		details, metadata, err := fixtures.cache.GetRevisionChartDetails("test-repo", "test-revision", "v1.0.0")
 		require.NoError(t, err)
-		assert.Equal(t, expectedItem, details)
+		assert.Equal(t, expectedItem.ChartDetails, details)
+		assert.Equal(t, expectedItem.Metadata, metadata)
 		fixtures.mockCache.AssertCacheCalledTimes(t, &mocks.CacheCallCounts{ExternalGets: 1, ExternalSets: 1})
 	})
 
@@ -626,35 +632,47 @@ func TestRevisionChartDetails(t *testing.T) {
 		fixtures := newFixtures()
 		t.Cleanup(fixtures.mockCache.StopRedisCallback)
 		cache := fixtures.cache
-		expectedItem := &v1alpha1.ChartDetails{
-			Description: "test-chart",
-			Home:        "v1.0.0",
-			Maintainers: []string{"test-maintainer"},
+		expectedItem := &ChartDetailsWithMetadata{
+			ChartDetails: &v1alpha1.ChartDetails{
+				Description: "test-chart",
+				Home:        "v1.0.0",
+				Maintainers: []string{"test-maintainer"},
+			},
+			Metadata: map[string]string{
+				"test-metadata": "test-metadata",
+			},
 		}
 		err := cache.cache.SetItem(
 			revisionChartDetailsKey("test-repo", "test-revision", "v1.0.0"),
 			expectedItem,
 			&cacheutil.CacheActionOpts{Expiration: 30 * time.Second})
 		require.NoError(t, err)
-		details, err := fixtures.cache.GetRevisionChartDetails("test-repo", "test-revision", "v1.0.0")
+		details, metadata, err := fixtures.cache.GetRevisionChartDetails("test-repo", "test-revision", "v1.0.0")
 		require.NoError(t, err)
-		assert.Equal(t, expectedItem, details)
+		assert.Equal(t, expectedItem.ChartDetails, details)
+		assert.Equal(t, expectedItem.Metadata, metadata)
 		fixtures.mockCache.AssertCacheCalledTimes(t, &mocks.CacheCallCounts{ExternalGets: 1, ExternalSets: 1})
 	})
 
 	t.Run("SetRevisionChartDetails", func(t *testing.T) {
 		fixtures := newFixtures()
 		t.Cleanup(fixtures.mockCache.StopRedisCallback)
-		expectedItem := &v1alpha1.ChartDetails{
-			Description: "test-chart",
-			Home:        "v1.0.0",
-			Maintainers: []string{"test-maintainer"},
+		expectedItem := &ChartDetailsWithMetadata{
+			ChartDetails: &v1alpha1.ChartDetails{
+				Description: "test-chart",
+				Home:        "v1.0.0",
+				Maintainers: []string{"test-maintainer"},
+			},
+			Metadata: map[string]string{
+				"test-metadata": "test-metadata",
+			},
 		}
-		err := fixtures.cache.SetRevisionChartDetails("test-repo", "test-revision", "v1.0.0", expectedItem)
+		err := fixtures.cache.SetRevisionChartDetails("test-repo", "test-revision", "v1.0.0", expectedItem.ChartDetails, expectedItem.Metadata)
 		require.NoError(t, err)
-		details, err := fixtures.cache.GetRevisionChartDetails("test-repo", "test-revision", "v1.0.0")
+		details, metadata, err := fixtures.cache.GetRevisionChartDetails("test-repo", "test-revision", "v1.0.0")
 		require.NoError(t, err)
-		assert.Equal(t, expectedItem, details)
+		assert.Equal(t, expectedItem.ChartDetails, details)
+		assert.Equal(t, expectedItem.Metadata, metadata)
 		fixtures.mockCache.AssertCacheCalledTimes(t, &mocks.CacheCallCounts{ExternalGets: 1, ExternalSets: 1})
 	})
 }
