@@ -56,7 +56,7 @@ type Client interface {
 	// ResolveRevision resolves a tag, digest, or semantic version constraint to a concrete digest.
 	// If noCache is true, the resolution bypasses the local tags cache and queries the remote registry.
 	// If the revision is already a digest, it is returned as-is.
-	ResolveRevision(ctx context.Context, revision string, noCache bool) (string, map[string]string, error)
+	ResolveRevision(ctx context.Context, revision string, noCache bool) (string, *versions.RevisionMetadata, error)
 
 	// DigestMetadata retrieves an OCI manifest for a given digest.
 	DigestMetadata(ctx context.Context, digest string) (*imagev1.Manifest, error)
@@ -292,7 +292,7 @@ func (c *nativeOCIClient) DigestMetadata(ctx context.Context, digest string) (*i
 	return getOCIManifest(ctx, digest, repo)
 }
 
-func (c *nativeOCIClient) ResolveRevision(ctx context.Context, revision string, noCache bool) (string, map[string]string, error) {
+func (c *nativeOCIClient) ResolveRevision(ctx context.Context, revision string, noCache bool) (string, *versions.RevisionMetadata, error) {
 	digest, err := c.resolveDigest(ctx, revision) // Lookup explicit revision
 	if err != nil {
 		// If the revision is not a semver constraint, just return the error
@@ -306,7 +306,7 @@ func (c *nativeOCIClient) ResolveRevision(ctx context.Context, revision string, 
 		}
 
 		// Look to see if revision is a semver constraint
-		version, _, err := versions.MaxVersion(revision, tags)
+		version, metadata, err := versions.MaxVersionWithMetadata(revision, tags)
 		if err != nil {
 			return "", nil, fmt.Errorf("no version for constraints: %w", err)
 		}
@@ -315,18 +315,11 @@ func (c *nativeOCIClient) ResolveRevision(ctx context.Context, revision string, 
 		if err != nil {
 			return "", nil, fmt.Errorf("error resolving digest: %w", err)
 		}
-		return digest, map[string]string{
-			"ORIGINAL_REVISION": revision,
-			"RESOLUTION_TYPE":   "range",
-			"RESOLVED_TAG":      version,
-		}, nil
+		return digest, metadata, nil
 	}
 
-	return digest, map[string]string{
-		"ORIGINAL_REVISION": revision,
-		"RESOLUTION_TYPE":   "version",
-		"RESOLVED_TAG":      digest,
-	}, nil
+	metadata := versions.NewRevisionMetadata(revision, versions.RevisionResolutionVersion)
+	return digest, metadata.WithResolvedTag(digest), nil
 }
 
 func (c *nativeOCIClient) GetTags(ctx context.Context, noCache bool) ([]string, error) {

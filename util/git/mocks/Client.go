@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"github.com/argoproj/argo-cd/v3/util/git"
+	"github.com/argoproj/argo-cd/v3/util/versions"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -803,7 +804,7 @@ func (_c *Client_LsRefs_Call) RunAndReturn(run func() (*git.Refs, error)) *Clien
 }
 
 // LsRemote provides a mock function for the type Client
-func (_mock *Client) LsRemote(revision string) (string, map[string]string, error) {
+func (_mock *Client) LsRemote(revision string) (string, *versions.RevisionMetadata, error) {
 	ret := _mock.Called(revision)
 
 	if len(ret) == 0 {
@@ -811,9 +812,9 @@ func (_mock *Client) LsRemote(revision string) (string, map[string]string, error
 	}
 
 	var r0 string
-	var r1 map[string]string
+	var r1 *versions.RevisionMetadata
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(string) (string, map[string]string, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(string) (string, *versions.RevisionMetadata, error)); ok {
 		return returnFunc(revision)
 	}
 	if returnFunc, ok := ret.Get(0).(func(string) string); ok {
@@ -821,11 +822,11 @@ func (_mock *Client) LsRemote(revision string) (string, map[string]string, error
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(string) map[string]string); ok {
+	if returnFunc, ok := ret.Get(1).(func(string) *versions.RevisionMetadata); ok {
 		r1 = returnFunc(revision)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(map[string]string)
+			r1 = ret.Get(1).(*versions.RevisionMetadata)
 		}
 	}
 	if returnFunc, ok := ret.Get(2).(func(string) error); ok {
@@ -860,12 +861,12 @@ func (_c *Client_LsRemote_Call) Run(run func(revision string)) *Client_LsRemote_
 	return _c
 }
 
-func (_c *Client_LsRemote_Call) Return(s string, stringToString map[string]string, err error) *Client_LsRemote_Call {
-	_c.Call.Return(s, stringToString, err)
+func (_c *Client_LsRemote_Call) Return(s string, revisionMetadata *versions.RevisionMetadata, err error) *Client_LsRemote_Call {
+	_c.Call.Return(s, revisionMetadata, err)
 	return _c
 }
 
-func (_c *Client_LsRemote_Call) RunAndReturn(run func(revision string) (string, map[string]string, error)) *Client_LsRemote_Call {
+func (_c *Client_LsRemote_Call) RunAndReturn(run func(revision string) (string, *versions.RevisionMetadata, error)) *Client_LsRemote_Call {
 	_c.Call.Return(run)
 	return _c
 }

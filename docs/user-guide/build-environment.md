@@ -13,16 +13,27 @@
 | `ARGOCD_APP_SOURCE_PATH`            | The path of the app within the source repo.                               |
 | `ARGOCD_APP_SOURCE_REPO_URL`        | The source repo URL.                                                      |
 | `ARGOCD_APP_SOURCE_TARGET_REVISION` | The target revision from the spec, e.g. `master`.                         |
-| `ARGOCD_APP_ORIGINAL_REVISION`      | The pre-resolved targeted revision, e.g. `v1.0.*`, or `HEAD`, or `master` |
 | `KUBE_VERSION`                      | The semantic version of Kubernetes without trailing metadata.             |
 | `KUBE_API_VERSIONS`                 | The version of the Kubernetes API.                                        |
 
-The follow build env vars are available in certain situations, e.g. targetRevision requires a [range resolution](../user-guide/tracking_strategies)
-| Variable | Description | `RESOLUTION_TYPE`
-| ---------------------------- | ----------------------------------------------------------------------- |----------------------|
-| `ARGOCD_APP_RESOLUTION_TYPE` | The type of resolution done for `revisionTarget`, e.g. `tag`, or `truncated_commit_sha` | Is `RESOLUTION_TYPE` |
-| `ARGOCD_APP_RESOLVED_TAG` | The tag resolved for [range resolution](../user-guide/tracking_strategies) | `tag` |
-| `ARGOCD_APP_RESOLVED_TO` | The post-resolved target revision, e.g. `v1.0.1` | `symbolic_reference` |
+## Revision Resolution Metadata
+
+The following build environment variables provide metadata about how the target revision was resolved. These are available when revision resolution metadata is present:
+
+| Variable                     | Description                                                                                                                      |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `ARGOCD_ORIGINAL_REVISION`   | The original revision string provided in the application spec, e.g. `v1.0.*`, `HEAD`, `master`, `^1.0.0`                       |
+| `ARGOCD_RESOLUTION_TYPE`     | How the revision was resolved. One of: `direct`, `range`, `symbolic_reference`, `truncated_commit_sha`, `version`               |
+| `ARGOCD_RESOLVED_TAG`        | The actual resolved revision/tag. For ranges, this is the matched version. For direct resolutions, this may be the commit SHA   |
+| `ARGOCD_RESOLVED_TO`         | The target of symbolic reference resolution (Git only), e.g. `refs/heads/main` when resolving `HEAD`                           |
+
+### Resolution Types
+
+- **`direct`**: Exact match (e.g., specific commit SHA, exact version, branch name)
+- **`range`**: Resolved from a semantic version constraint (e.g., `^1.0.0` → `1.2.3`)  
+- **`symbolic_reference`**: Resolved from symbolic reference like `HEAD` (Git only)
+- **`truncated_commit_sha`**: Assumed to be a truncated commit SHA (Git only)
+- **`version`**: Resolved as a specific version (OCI/Helm)
 
 In case you don't want a variable to be interpolated, `$` can be escaped via `$$`.
 

@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/argoproj/argo-cd/v3/util/io"
+	"github.com/argoproj/argo-cd/v3/util/versions"
 	"github.com/opencontainers/image-spec/specs-go/v1"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -301,7 +302,7 @@ func (_c *Client_GetTags_Call) RunAndReturn(run func(ctx context.Context, noCach
 }
 
 // ResolveRevision provides a mock function for the type Client
-func (_mock *Client) ResolveRevision(ctx context.Context, revision string, noCache bool) (string, map[string]string, error) {
+func (_mock *Client) ResolveRevision(ctx context.Context, revision string, noCache bool) (string, *versions.RevisionMetadata, error) {
 	ret := _mock.Called(ctx, revision, noCache)
 
 	if len(ret) == 0 {
@@ -309,9 +310,9 @@ func (_mock *Client) ResolveRevision(ctx context.Context, revision string, noCac
 	}
 
 	var r0 string
-	var r1 map[string]string
+	var r1 *versions.RevisionMetadata
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, bool) (string, map[string]string, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, bool) (string, *versions.RevisionMetadata, error)); ok {
 		return returnFunc(ctx, revision, noCache)
 	}
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string, bool) string); ok {
@@ -319,11 +320,11 @@ func (_mock *Client) ResolveRevision(ctx context.Context, revision string, noCac
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, bool) map[string]string); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, bool) *versions.RevisionMetadata); ok {
 		r1 = returnFunc(ctx, revision, noCache)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(map[string]string)
+			r1 = ret.Get(1).(*versions.RevisionMetadata)
 		}
 	}
 	if returnFunc, ok := ret.Get(2).(func(context.Context, string, bool) error); ok {
@@ -370,12 +371,12 @@ func (_c *Client_ResolveRevision_Call) Run(run func(ctx context.Context, revisio
 	return _c
 }
 
-func (_c *Client_ResolveRevision_Call) Return(s string, stringToString map[string]string, err error) *Client_ResolveRevision_Call {
-	_c.Call.Return(s, stringToString, err)
+func (_c *Client_ResolveRevision_Call) Return(s string, revisionMetadata *versions.RevisionMetadata, err error) *Client_ResolveRevision_Call {
+	_c.Call.Return(s, revisionMetadata, err)
 	return _c
 }
 
-func (_c *Client_ResolveRevision_Call) RunAndReturn(run func(ctx context.Context, revision string, noCache bool) (string, map[string]string, error)) *Client_ResolveRevision_Call {
+func (_c *Client_ResolveRevision_Call) RunAndReturn(run func(ctx context.Context, revision string, noCache bool) (string, *versions.RevisionMetadata, error)) *Client_ResolveRevision_Call {
 	_c.Call.Return(run)
 	return _c
 }

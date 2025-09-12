@@ -10,8 +10,10 @@ import (
 )
 
 const (
+	// Deprecated: Use RevisionResolutionDirect instead
 	RevisionTypeDirect = "direct"
-	RevisionTypeRange  = "range"
+	// Deprecated: Use RevisionResolutionRange instead
+	RevisionTypeRange = "range"
 )
 
 // MaxVersion takes a revision and a list of tags.
@@ -66,6 +68,61 @@ func MaxVersion(revision string, tags []string) (string, string, error) {
 
 	log.Debugf("Semver constraint '%s' resolved to version '%s'", constraints.String(), maxVersion.Original())
 	return maxVersion.Original(), RevisionTypeRange, nil
+}
+
+// MaxVersionWithMetadata takes a revision and a list of tags and returns the resolved version
+// along with structured metadata about the resolution process.
+func MaxVersionWithMetadata(revision string, tags []string) (string, *RevisionMetadata, error) {
+	metadata := NewRevisionMetadata(revision, RevisionResolutionDirect)
+
+	if v, err := semver.NewVersion(revision); err == nil {
+		// If the revision is a valid version, then we know it isn't a constraint; it's just a pin.
+		// In which case, we should use standard tag resolution mechanisms and return the original value.
+		// For example, the following are considered valid versions, and therefore should match an exact tag:
+		// - "v1.0.0"/"1.0.0"
+		// - "v1.0"/"1.0"
+		return v.Original(), metadata.WithResolvedTag(v.Original()), nil
+	}
+
+	constraints, err := semver.NewConstraint(revision)
+	if err != nil {
+		log.Debugf("Revision '%s' is not a valid semver constraint, resolving via basic string equality.", revision)
+		// If this is also an invalid constraint, we just iterate over available tags to determine if it is valid/invalid.
+		for _, tag := range tags {
+			if tag == revision {
+				return revision, metadata.WithResolvedTag(revision), nil
+			}
+		}
+		return "", nil, fmt.Errorf("failed to determine semver constraint: %w", err)
+	}
+
+	// Update resolution type to range since we have a valid constraint
+	metadata.ResolutionType = RevisionResolutionRange
+
+	var maxVersion *semver.Version
+	for _, tag := range tags {
+		v, err := semver.NewVersion(tag)
+
+		// Invalid semantic version ignored
+		if errors.Is(err, semver.ErrInvalidSemVer) {
+			log.Debugf("Invalid semantic version: %s", tag)
+			continue
+		}
+		if err != nil {
+			return "", nil, fmt.Errorf("invalid semver version in tags: %w", err)
+		}
+		if constraints.Check(v) {
+			if maxVersion == nil || v.GreaterThan(maxVersion) {
+				maxVersion = v
+			}
+		}
+	}
+	if maxVersion == nil {
+		return "", nil, fmt.Errorf("version matching constraint not found in %d tags", len(tags))
+	}
+
+	log.Debugf("Semver constraint '%s' resolved to version '%s'", constraints.String(), maxVersion.Original())
+	return maxVersion.Original(), metadata.WithResolvedTag(maxVersion.Original()), nil
 }
 
 // Returns true if the given revision is not an exact semver and can be parsed as a semver constraint

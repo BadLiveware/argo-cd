@@ -478,7 +478,12 @@ func revisionChartDetailsKey(repoURL, chart, revision string) string {
 
 func (c *Cache) GetRevisionChartDetails(repoURL, chart, revision string) (*appv1.ChartDetails, map[string]string, error) {
 	item := &ChartDetailsWithMetadata{}
-	return item.ChartDetails, item.Metadata, c.cache.GetItem(revisionChartDetailsKey(repoURL, chart, revision), item)
+	err := c.cache.GetItem(revisionChartDetailsKey(repoURL, chart, revision), item)
+	if err != nil {
+		// On cache miss, return empty structs instead of nil
+		return &appv1.ChartDetails{}, map[string]string{}, err
+	}
+	return item.ChartDetails, item.Metadata, nil
 }
 
 func (c *Cache) SetRevisionChartDetails(repoURL, chart, revision string, item *appv1.ChartDetails, metadata map[string]string) error {

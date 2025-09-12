@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/argoproj/argo-cd/v3/util/oci"
+	"github.com/argoproj/argo-cd/v3/util/versions"
 
 	cacheutil "github.com/argoproj/argo-cd/v3/util/cache"
 
@@ -138,7 +139,7 @@ func newServiceWithMocks(t *testing.T, root string, signed bool) (*Service, *git
 		helmClient.On("DependencyBuild").Return(nil)
 
 		ociClient.On("GetTags", mock.Anything, mock.Anything).Return(nil)
-		ociClient.On("ResolveRevision", mock.Anything, mock.Anything, mock.Anything).Return("", nil)
+		ociClient.On("ResolveRevision", mock.Anything, mock.Anything, mock.Anything).Return("", &versions.RevisionMetadata{}, nil)
 		ociClient.On("Extract", mock.Anything, mock.Anything).Return("./testdata/my-chart", utilio.NopCloser, nil)
 
 		paths.On("Add", mock.Anything, mock.Anything).Return(root, nil)
@@ -1944,10 +1945,7 @@ func Test_newEnv(t *testing.T) {
 
 func Test_newEnv_BuildMetadata(t *testing.T) {
 	metadata := &BuildMetadata{
-		Data: map[string]string{
-			"RESOLVED_TAG":      "v1.2.3",
-			"ORIGINAL_REVISION": "latest",
-		},
+		RevisionMetadata: versions.NewRevisionMetadata("latest", versions.RevisionResolutionDirect).WithResolvedTag("v1.2.3"),
 	}
 	envWithMetadata := newEnv(&apiclient.ManifestRequest{
 		AppName:     "my-app-name",
@@ -1970,8 +1968,9 @@ func Test_newEnv_BuildMetadata(t *testing.T) {
 		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_SOURCE_REPO_URL", Value: "https://github.com/my-org/my-repo"},
 		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_SOURCE_PATH", Value: "my-path"},
 		&v1alpha1.EnvEntry{Name: "ARGOCD_APP_SOURCE_TARGET_REVISION", Value: "my-target-revision"},
-		&v1alpha1.EnvEntry{Name: "ARGOCD_RESOLVED_TAG", Value: "v1.2.3"},
 		&v1alpha1.EnvEntry{Name: "ARGOCD_ORIGINAL_REVISION", Value: "latest"},
+		&v1alpha1.EnvEntry{Name: "ARGOCD_RESOLUTION_TYPE", Value: "direct"},
+		&v1alpha1.EnvEntry{Name: "ARGOCD_RESOLVED_TAG", Value: "v1.2.3"},
 	}
 	assert.Equal(t, expected, envWithMetadata)
 }
