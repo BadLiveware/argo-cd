@@ -423,7 +423,7 @@ func Test_nativeOCIClient_ResolveRevision(t *testing.T) {
 			c := newClientWithLock(tt.fields.repoURL, globalLock, tt.fields.repo, tt.fields.tagsFunc, func(_ context.Context) error {
 				return nil
 			}, tt.fields.allowedMediaTypes)
-			got, err := c.ResolveRevision(t.Context(), tt.revision, tt.noCache)
+			got, revisionMetadata, err := c.ResolveRevision(t.Context(), tt.revision, tt.noCache)
 			if tt.expectedError != nil {
 				require.EqualError(t, err, tt.expectedError.Error())
 				return
@@ -433,6 +433,11 @@ func Test_nativeOCIClient_ResolveRevision(t *testing.T) {
 			if got != tt.expectedDigest {
 				t.Errorf("ResolveRevision() got = %v, expectedDigest %v", got, tt.expectedDigest)
 			}
+			require.Equal(t, revisionMetadata, map[string]string{
+				"ORIGINAL_REVISION": tt.revision,
+				"RESOLUTION_TYPE":   "version",
+				"RESOLVED_TAG":      got,
+			})
 		})
 	}
 }

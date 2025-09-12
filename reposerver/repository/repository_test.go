@@ -1980,11 +1980,11 @@ func TestService_newHelmClientResolveRevision(t *testing.T) {
 	service := newService(t, ".")
 
 	t.Run("EmptyRevision", func(t *testing.T) {
-		_, _, err := service.newHelmClientResolveRevision(&v1alpha1.Repository{}, "", "my-chart", true)
+		_, _, _, err := service.newHelmClientResolveRevision(&v1alpha1.Repository{}, "", "my-chart", true)
 		assert.EqualError(t, err, "invalid revision: failed to determine semver constraint: improper constraint: ")
 	})
 	t.Run("InvalidRevision", func(t *testing.T) {
-		_, _, err := service.newHelmClientResolveRevision(&v1alpha1.Repository{}, "???", "my-chart", true)
+		_, _, _, err := service.newHelmClientResolveRevision(&v1alpha1.Repository{}, "???", "my-chart", true)
 		assert.EqualError(t, err, "invalid revision: failed to determine semver constraint: improper constraint: ???")
 	})
 }
@@ -4313,7 +4313,7 @@ func TestGetRevisionChartDetails(t *testing.T) {
 			Description: "test-description",
 			Home:        "test-home",
 			Maintainers: []string{"test-maintainer"},
-		})
+		}, map[string]string{"test-metadata": "test-metadata"})
 		require.NoError(t, err)
 		chartDetails, err := service.GetRevisionChartDetails(t.Context(), &apiclient.RepoServerRevisionChartDetailsRequest{
 			Repo: &v1alpha1.Repository{

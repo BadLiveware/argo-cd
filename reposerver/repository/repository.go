@@ -2538,11 +2538,11 @@ func (s *Service) GetOCIMetadata(ctx context.Context, q *apiclient.RepoServerRev
 }
 
 // GetRevisionChartDetails returns the helm chart details of a given version
-func (s *Service) GetRevisionChartDetails(_ context.Context, q *apiclient.RepoServerRevisionChartDetailsRequest) (*v1alpha1.ChartDetails, map[string]string, error) {
-	details, metadata, err := s.cache.GetRevisionChartDetails(q.Repo.Repo, q.Name, q.Revision)
+func (s *Service) GetRevisionChartDetails(_ context.Context, q *apiclient.RepoServerRevisionChartDetailsRequest) (*v1alpha1.ChartDetails, error) {
+	details, _, err := s.cache.GetRevisionChartDetails(q.Repo.Repo, q.Name, q.Revision)
 	if err == nil {
 		log.Infof("revision chart details cache hit: %s/%s/%s", q.Repo.Repo, q.Name, q.Revision)
-		return details, metadata, nil
+		return details, nil
 	}
 	if errors.Is(err, cache.ErrCacheMiss) {
 		log.Infof("revision metadata cache miss: %s/%s/%s", q.Repo.Repo, q.Name, q.Revision)
@@ -2551,28 +2551,28 @@ func (s *Service) GetRevisionChartDetails(_ context.Context, q *apiclient.RepoSe
 	}
 	helmClient, revision, metadata, err := s.newHelmClientResolveRevision(q.Repo, q.Revision, q.Name, true)
 	if err != nil {
-		return nil, nil, fmt.Errorf("helm client error: %w", err)
+		return nil, fmt.Errorf("helm client error: %w", err)
 	}
 	chartPath, closer, err := helmClient.ExtractChart(q.Name, revision, false, s.initConstants.HelmManifestMaxExtractedSize, s.initConstants.DisableHelmManifestMaxExtractedSize)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error extracting chart: %w", err)
+		return nil, fmt.Errorf("error extracting chart: %w", err)
 	}
 	defer utilio.Close(closer)
 	helmCmd, err := helm.NewCmdWithVersion(chartPath, q.Repo.EnableOCI, q.Repo.Proxy, q.Repo.NoProxy)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error creating helm cmd: %w", err)
+		return nil, fmt.Errorf("error creating helm cmd: %w", err)
 	}
 	defer helmCmd.Close()
 	helmDetails, err := helmCmd.InspectChart()
 	if err != nil {
-		return nil, nil, fmt.Errorf("error inspecting chart: %w", err)
+		return nil, fmt.Errorf("error inspecting chart: %w", err)
 	}
 	details, err = getChartDetails(helmDetails)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error getting chart details: %w", err)
+		return nil, fmt.Errorf("error getting chart details: %w", err)
 	}
 	_ = s.cache.SetRevisionChartDetails(q.Repo.Repo, q.Name, q.Revision, details, metadata)
-	return details, metadata, nil
+	return details, nil
 }
 
 func fileParameters(q *apiclient.RepoServerAppDetailsQuery) []v1alpha1.HelmFileParameter {
