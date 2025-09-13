@@ -2685,7 +2685,7 @@ func (s *Service) newHelmClientResolveRevision(repo *v1alpha1.Repository, revisi
 		tags = entries.Tags()
 	}
 
-	maxV, metadata, err := versions.MaxVersionWithMetadata(revision, tags)
+	maxV, metadata, err := versions.MaxVersion(revision, tags)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("invalid revision: %w", err)
 	}

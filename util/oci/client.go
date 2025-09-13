@@ -306,7 +306,7 @@ func (c *nativeOCIClient) ResolveRevision(ctx context.Context, revision string, 
 		}
 
 		// Look to see if revision is a semver constraint
-		version, metadata, err := versions.MaxVersionWithMetadata(revision, tags)
+		version, metadata, err := versions.MaxVersion(revision, tags)
 		if err != nil {
 			return "", nil, fmt.Errorf("no version for constraints: %w", err)
 		}

@@ -714,7 +714,7 @@ func (m *nativeGitClient) lsRemote(revision string) (string, *versions.RevisionM
 	}
 
 	// Check for tag resolution using semantic versioning
-	maxV, versionMetadata, err := versions.MaxVersionWithMetadata(revision, getGitTags(refs))
+	maxV, versionMetadata, err := versions.MaxVersion(revision, getGitTags(refs))
 	if err == nil {
 		metadata = versionMetadata
 		revision = maxV
