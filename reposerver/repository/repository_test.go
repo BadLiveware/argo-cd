@@ -4312,7 +4312,11 @@ func TestGetRevisionChartDetails(t *testing.T) {
 			Description: "test-description",
 			Home:        "test-home",
 			Maintainers: []string{"test-maintainer"},
-		}, map[string]string{"test-metadata": "test-metadata"})
+		}, &versions.RevisionMetadata{
+			OriginalRevision: "test-revision",
+			ResolutionType:   versions.RevisionResolutionDirect,
+			ResolvedTag:      "test-tag",
+		})
 		require.NoError(t, err)
 		chartDetails, err := service.GetRevisionChartDetails(t.Context(), &apiclient.RepoServerRevisionChartDetailsRequest{
 			Repo: &v1alpha1.Repository{

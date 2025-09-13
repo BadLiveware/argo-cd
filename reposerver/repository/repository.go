@@ -2581,19 +2581,7 @@ func (s *Service) GetRevisionChartDetails(_ context.Context, q *apiclient.RepoSe
 	if err != nil {
 		return nil, fmt.Errorf("error getting chart details: %w", err)
 	}
-	var metadataMap map[string]string
-	if metadata != nil {
-		metadataMap = metadata.ToEnvVars()
-		// Convert ARGOCD_ prefixed keys back to the original keys for cache compatibility
-		originalMap := make(map[string]string)
-		for k, v := range metadataMap {
-			if strings.HasPrefix(k, "ARGOCD_") {
-				originalMap[strings.TrimPrefix(k, "ARGOCD_")] = v
-			}
-		}
-		metadataMap = originalMap
-	}
-	_ = s.cache.SetRevisionChartDetails(q.Repo.Repo, q.Name, q.Revision, details, metadataMap)
+	_ = s.cache.SetRevisionChartDetails(q.Repo.Repo, q.Name, q.Revision, details, metadata)
 	return details, nil
 }
 

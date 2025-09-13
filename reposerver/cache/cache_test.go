@@ -16,6 +16,7 @@ import (
 	"github.com/argoproj/argo-cd/v3/reposerver/apiclient"
 	"github.com/argoproj/argo-cd/v3/reposerver/cache/mocks"
 	cacheutil "github.com/argoproj/argo-cd/v3/util/cache"
+	"github.com/argoproj/argo-cd/v3/util/versions"
 )
 
 type MockedCache struct {
@@ -612,8 +613,10 @@ func TestRevisionChartDetails(t *testing.T) {
 				Home:        "v1.0.0",
 				Maintainers: []string{"test-maintainer"},
 			},
-			Metadata: map[string]string{
-				"test-metadata": "test-metadata",
+			RevisionMetadata: &versions.RevisionMetadata{
+				OriginalRevision: "test-revision",
+				ResolutionType:   versions.RevisionResolutionDirect,
+				ResolvedTag:      "test-tag",
 			},
 		}
 		err := cache.cache.SetItem(
@@ -624,7 +627,7 @@ func TestRevisionChartDetails(t *testing.T) {
 		details, metadata, err := fixtures.cache.GetRevisionChartDetails("test-repo", "test-revision", "v1.0.0")
 		require.NoError(t, err)
 		assert.Equal(t, expectedItem.ChartDetails, details)
-		assert.Equal(t, expectedItem.Metadata, metadata)
+		assert.Equal(t, expectedItem.RevisionMetadata, metadata)
 		fixtures.mockCache.AssertCacheCalledTimes(t, &mocks.CacheCallCounts{ExternalGets: 1, ExternalSets: 1})
 	})
 
@@ -638,8 +641,10 @@ func TestRevisionChartDetails(t *testing.T) {
 				Home:        "v1.0.0",
 				Maintainers: []string{"test-maintainer"},
 			},
-			Metadata: map[string]string{
-				"test-metadata": "test-metadata",
+			RevisionMetadata: &versions.RevisionMetadata{
+				OriginalRevision: "test-revision",
+				ResolutionType:   versions.RevisionResolutionDirect,
+				ResolvedTag:      "test-tag",
 			},
 		}
 		err := cache.cache.SetItem(
@@ -650,7 +655,7 @@ func TestRevisionChartDetails(t *testing.T) {
 		details, metadata, err := fixtures.cache.GetRevisionChartDetails("test-repo", "test-revision", "v1.0.0")
 		require.NoError(t, err)
 		assert.Equal(t, expectedItem.ChartDetails, details)
-		assert.Equal(t, expectedItem.Metadata, metadata)
+		assert.Equal(t, expectedItem.RevisionMetadata, metadata)
 		fixtures.mockCache.AssertCacheCalledTimes(t, &mocks.CacheCallCounts{ExternalGets: 1, ExternalSets: 1})
 	})
 
@@ -663,16 +668,18 @@ func TestRevisionChartDetails(t *testing.T) {
 				Home:        "v1.0.0",
 				Maintainers: []string{"test-maintainer"},
 			},
-			Metadata: map[string]string{
-				"test-metadata": "test-metadata",
+			RevisionMetadata: &versions.RevisionMetadata{
+				OriginalRevision: "test-revision",
+				ResolutionType:   versions.RevisionResolutionDirect,
+				ResolvedTag:      "test-tag",
 			},
 		}
-		err := fixtures.cache.SetRevisionChartDetails("test-repo", "test-revision", "v1.0.0", expectedItem.ChartDetails, expectedItem.Metadata)
+		err := fixtures.cache.SetRevisionChartDetails("test-repo", "test-revision", "v1.0.0", expectedItem.ChartDetails, expectedItem.RevisionMetadata)
 		require.NoError(t, err)
 		details, metadata, err := fixtures.cache.GetRevisionChartDetails("test-repo", "test-revision", "v1.0.0")
 		require.NoError(t, err)
 		assert.Equal(t, expectedItem.ChartDetails, details)
-		assert.Equal(t, expectedItem.Metadata, metadata)
+		assert.Equal(t, expectedItem.RevisionMetadata, metadata)
 		fixtures.mockCache.AssertCacheCalledTimes(t, &mocks.CacheCallCounts{ExternalGets: 1, ExternalSets: 1})
 	})
 }

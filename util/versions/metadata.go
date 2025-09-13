@@ -4,15 +4,15 @@ package versions
 type RevisionResolutionType string
 
 const (
-	// RevisionResolutionDirect indicates the revision was resolved directly (exact match)
+	// The revision was resolved directly (exact match)
 	RevisionResolutionDirect RevisionResolutionType = "direct"
-	// RevisionResolutionRange indicates the revision was resolved from a semver constraint/range
+	// The revision was resolved from a semver constraint/range
 	RevisionResolutionRange RevisionResolutionType = "range"
-	// RevisionResolutionSymbolicReference indicates the revision was resolved from a symbolic reference (e.g., HEAD)
+	// The revision was resolved from a symbolic reference (e.g., HEAD)
 	RevisionResolutionSymbolicReference RevisionResolutionType = "symbolic_reference"
-	// RevisionResolutionTruncatedCommitSHA indicates the revision was assumed to be a truncated commit SHA
+	// The revision was assumed to be a truncated commit SHA
 	RevisionResolutionTruncatedCommitSHA RevisionResolutionType = "truncated_commit_sha"
-	// RevisionResolutionVersion indicates the revision was resolved as a specific version
+	// The revision was resolved as a specific version, e.g. "v1.0.0"
 	RevisionResolutionVersion RevisionResolutionType = "version"
 )
 
@@ -51,25 +51,4 @@ func (m *RevisionMetadata) WithResolvedTag(tag string) *RevisionMetadata {
 func (m *RevisionMetadata) WithResolvedTo(target string) *RevisionMetadata {
 	m.ResolvedTo = target
 	return m
-}
-
-// ToEnvVars converts the revision metadata to environment variable key-value pairs
-// with the ARGOCD_ prefix for use in build environments
-func (m *RevisionMetadata) ToEnvVars() map[string]string {
-	envVars := make(map[string]string)
-
-	if m.OriginalRevision != "" {
-		envVars["ARGOCD_ORIGINAL_REVISION"] = m.OriginalRevision
-	}
-	if m.ResolutionType != "" {
-		envVars["ARGOCD_RESOLUTION_TYPE"] = string(m.ResolutionType)
-	}
-	if m.ResolvedTag != "" {
-		envVars["ARGOCD_RESOLVED_TAG"] = m.ResolvedTag
-	}
-	if m.ResolvedTo != "" {
-		envVars["ARGOCD_RESOLVED_TO"] = m.ResolvedTo
-	}
-
-	return envVars
 }

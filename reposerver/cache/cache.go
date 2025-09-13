@@ -21,6 +21,7 @@ import (
 	cacheutil "github.com/argoproj/argo-cd/v3/util/cache"
 	"github.com/argoproj/argo-cd/v3/util/env"
 	"github.com/argoproj/argo-cd/v3/util/hash"
+	"github.com/argoproj/argo-cd/v3/util/versions"
 )
 
 var (
@@ -36,8 +37,8 @@ type Cache struct {
 }
 
 type ChartDetailsWithMetadata struct {
-	ChartDetails *appv1.ChartDetails
-	Metadata     map[string]string
+	ChartDetails     *appv1.ChartDetails
+	RevisionMetadata *versions.RevisionMetadata
 }
 
 // ClusterRuntimeInfo holds cluster runtime information
@@ -476,22 +477,22 @@ func revisionChartDetailsKey(repoURL, chart, revision string) string {
 	return fmt.Sprintf("chartdetails|%s|%s|%s", repoURL, chart, revision)
 }
 
-func (c *Cache) GetRevisionChartDetails(repoURL, chart, revision string) (*appv1.ChartDetails, map[string]string, error) {
+func (c *Cache) GetRevisionChartDetails(repoURL, chart, revision string) (*appv1.ChartDetails, *versions.RevisionMetadata, error) {
 	item := &ChartDetailsWithMetadata{}
 	err := c.cache.GetItem(revisionChartDetailsKey(repoURL, chart, revision), item)
 	if err != nil {
 		// On cache miss, return empty structs instead of nil
-		return &appv1.ChartDetails{}, map[string]string{}, err
+		return &appv1.ChartDetails{}, nil, err
 	}
-	return item.ChartDetails, item.Metadata, nil
+	return item.ChartDetails, item.RevisionMetadata, nil
 }
 
-func (c *Cache) SetRevisionChartDetails(repoURL, chart, revision string, item *appv1.ChartDetails, metadata map[string]string) error {
+func (c *Cache) SetRevisionChartDetails(repoURL, chart, revision string, item *appv1.ChartDetails, metadata *versions.RevisionMetadata) error {
 	return c.cache.SetItem(
 		revisionChartDetailsKey(repoURL, chart, revision),
 		&ChartDetailsWithMetadata{
-			ChartDetails: item,
-			Metadata:     metadata,
+			ChartDetails:     item,
+			RevisionMetadata: metadata,
 		},
 		&cacheutil.CacheActionOpts{Expiration: c.repoCacheExpiration})
 }
