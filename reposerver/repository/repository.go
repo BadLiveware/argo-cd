@@ -3299,53 +3299,39 @@ func (s *Service) buildMetadataHasChanged(request *apiclient.UpdateRevisionForPa
 func (s *Service) appParametersWouldChange(appSource *v1alpha1.ApplicationSource, oldEnv, newEnv *v1alpha1.Env) bool {
 	if appSource.Helm != nil {
 		for _, param := range appSource.Helm.Parameters {
-			oldValue := oldEnv.Envsubst(param.Value)
-			newValue := newEnv.Envsubst(param.Value)
-			if oldValue != newValue {
-				return true
-			}
+			return compareBuildMetadata(param.Value, oldEnv, newEnv)
 		}
 
 		for _, fileParam := range appSource.Helm.FileParameters {
-			oldPath := oldEnv.Envsubst(fileParam.Path)
-			newPath := newEnv.Envsubst(fileParam.Path)
-			if oldPath != newPath {
-				return true
-			}
+			return compareBuildMetadata(fileParam.Path, oldEnv, newEnv)
 		}
 	}
 
 	if appSource.Directory != nil && !appSource.Directory.Jsonnet.IsZero() {
 		// Check TLAs (Top Level Arguments)
 		for _, tla := range appSource.Directory.Jsonnet.TLAs {
-			oldValue := oldEnv.Envsubst(tla.Value)
-			newValue := newEnv.Envsubst(tla.Value)
-			if oldValue != newValue {
-				return true
-			}
+			return compareBuildMetadata(tla.Value, oldEnv, newEnv)
 		}
 
 		// Check ExtVars (External Variables)
 		for _, extVar := range appSource.Directory.Jsonnet.ExtVars {
-			oldValue := oldEnv.Envsubst(extVar.Value)
-			newValue := newEnv.Envsubst(extVar.Value)
-			if oldValue != newValue {
-				return true
-			}
+			return compareBuildMetadata(extVar.Value, oldEnv, newEnv)
 		}
 	}
 
 	if appSource.Plugin != nil {
 		for _, envEntry := range appSource.Plugin.Env {
-			oldValue := oldEnv.Envsubst(envEntry.Value)
-			newValue := newEnv.Envsubst(envEntry.Value)
-			if oldValue != newValue {
-				return true
-			}
+			return compareBuildMetadata(envEntry.Value, oldEnv, newEnv)
 		}
 	}
 
 	return false
+}
+
+func compareBuildMetadata(value string, oldEnv, newEnv *v1alpha1.Env) bool {
+	oldValue := oldEnv.Envsubst(value)
+	newValue := newEnv.Envsubst(value)
+	return oldValue != newValue
 }
 
 func (s *Service) updateCachedRevision(logCtx *log.Entry, oldRev string, newRev string, request *apiclient.UpdateRevisionForPathsRequest, gitClientOpts git.ClientOpts) error {
